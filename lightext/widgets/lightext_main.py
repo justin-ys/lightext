@@ -14,15 +14,18 @@ class MainWindow(QMainWindow):
 
         saveAction = QAction("Save", self)
         saveAction.triggered.connect(editor.save)
-
+        
         openAction = QAction("Open", self)
         openAction.triggered.connect(editor.open)
+
+        newtabAction  = QAction("New", self)
+        newtabAction.triggered.connect(editor.new)
 
         menubar = self.menuBar()
         fileMenu = menubar.addMenu("File")
         fileMenu.addAction(saveAction)
         fileMenu.addAction(openAction)
-
+        fileMenu.addAction(newtabAction)
 
 
         self.show()

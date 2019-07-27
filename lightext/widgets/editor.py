@@ -29,11 +29,14 @@ class TabWindow(QWidget):
             tab.save(tab.path)
 
     def open(self):
-        tab = self.tabs.currentWidget()
+        tab = self.new()
         path, _ = QFileDialog.getOpenFileName(self, caption="Open file...")
         if path:
             tab.open(path)
             self.tabs.setTabText(self.tabs.currentIndex(), filename_from_path(path))
+
+    def new(self):
+        return self.tabs.addTab(TextEditor(), "New file")
 
 class TextEditor(QTextEdit):
 
