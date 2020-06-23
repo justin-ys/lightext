@@ -6,6 +6,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super(MainWindow, self).__init__()
 
+        #Set up tabs
         self.resize(800,600)
         self.setWindowTitle("Lightext")
 
@@ -14,7 +15,7 @@ class MainWindow(QMainWindow):
 
         saveAction = QAction("Save", self)
         saveAction.triggered.connect(editor.save)
-        
+
         openAction = QAction("Open", self)
         openAction.triggered.connect(editor.open)
 
@@ -29,3 +30,4 @@ class MainWindow(QMainWindow):
 
 
         self.show()
+

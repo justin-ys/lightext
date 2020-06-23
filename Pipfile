@@ -5,6 +5,8 @@ name = "pypi"
 
 [packages]
 pyqt5 = "*"
+pyqtdeploy = "*"
+pyqt5-stubs = "*"
 
 [dev-packages]
 

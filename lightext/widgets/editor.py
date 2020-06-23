@@ -1,20 +1,36 @@
-from PyQt5.QtWidgets import (QTextEdit, QWidget, QTabWidget, QFileDialog, QVBoxLayout)
+from PyQt5.QtWidgets import (QTextEdit, QWidget, QTabWidget, QFileDialog, QVBoxLayout, QPushButton)
+from PyQt5.QtCore import pyqtSignal
+from PyQt5.Qt import QIcon, QSize
+from ntpath import basename
+from functools import partial
 
-def filename_from_path(path):
-    return path.split("/")[-1]
 
 class TabWindow(QWidget):
+
+    class __closeWidget__(QPushButton):
+        #TODO: Get hovering working in QLabel, or something. QPushButton is ugly
+        def __init__(self):
+            super().__init__()
+            img = "resources/close_16x16.png"
+            self.setIcon(QIcon(img))
+            self.setFixedSize(QSize(16,16))
+            #self.setStyleSheet("border: none;")
+
+
     def __init__(self):
         super(TabWindow, self).__init__()
 
         self.tabs = QTabWidget()
+        self.tabs.setTabsClosable(True)
 
         vbox = QVBoxLayout()
         vbox.addWidget(self.tabs)
         self.setLayout(vbox)
 
         editor = TextEditor()
-        self.tabs.addTab(editor, "New File")
+        self.new()
+
+
 
     def save(self):
         tab = self.tabs.currentWidget()
@@ -23,20 +39,32 @@ class TabWindow(QWidget):
             path, _ = QFileDialog.getSaveFileName(self, "Save as...", "", "Plaintext (*.txt)")
             if path:
                 tab.save(path)
-                self.tabs.setTabText(self.tabs.currentIndex(), filename_from_path(path))
+                self.tabs.setTabText(self.tabs.currentIndex(), basename(path))
 
         else:
             tab.save(tab.path)
 
     def open(self):
-        tab = self.new()
         path, _ = QFileDialog.getOpenFileName(self, caption="Open file...")
         if path:
+            tab = self.new()
+            self.tabs.setCurrentWidget(tab)
             tab.open(path)
-            self.tabs.setTabText(self.tabs.currentIndex(), filename_from_path(path))
+            self.tabs.setTabText(self.tabs.currentIndex(), basename(path))
+
 
     def new(self):
-        return self.tabs.addTab(TextEditor(), "New file")
+        index = self.tabs.addTab(TextEditor(), "New file")
+        close = self.__closeWidget__()
+        close.clicked.connect(partial(self.__closeTab__, index))
+        self.tabs.tabBar().setTabButton(index, self.tabs.tabBar().RightSide, close)
+        return self.tabs.widget(index)
+
+    def __closeTab__(self, index, success):
+        return self.tabs.removeTab(index)
+
+
+
 
 class TextEditor(QTextEdit):
 
