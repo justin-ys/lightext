@@ -3,15 +3,17 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.Qt import QIcon, QSize
 from ntpath import basename
 from functools import partial
+from lightext import config
+
 
 
 class TabWindow(QWidget):
-
     class __closeWidget__(QPushButton):
         #TODO: Get hovering working in QLabel, or something. QPushButton is ugly
         def __init__(self):
+            self.bank = config.ResourceBank()
             super().__init__()
-            img = "resources/close_16x16.png"
+            img = self.bank.load_resource("close")
             self.setIcon(QIcon(img))
             self.setFixedSize(QSize(16,16))
             #self.setStyleSheet("border: none;")
