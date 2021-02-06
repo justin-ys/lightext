@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QMessageBox, QMainWindow
+from PyQt5.QtWidgets import QMessageBox
 
 class Popup(QMessageBox):
     def __init__(self, title, text, type):
