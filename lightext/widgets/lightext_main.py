@@ -1,8 +1,10 @@
 from PyQt5.QtWidgets import (QMainWindow, QAction)
 from lightext.widgets.editor import TabWindow
 
+from lightext.signals import LightextSignals
+
 class MainWindow(QMainWindow):
-    
+
     def __init__(self):
         super().__init__()
 
@@ -28,6 +30,6 @@ class MainWindow(QMainWindow):
         fileMenu.addAction(openAction)
         fileMenu.addAction(newtabAction)
 
+        LightextSignals.changeWindowTitle.connect(self.setWindowTitle)
 
         self.show()
-

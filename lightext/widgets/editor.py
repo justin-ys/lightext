@@ -5,8 +5,9 @@ from PyQt5.Qt import QIcon, QSize, QRect
 from PyQt5.QtGui import QPainter, QBrush, QColor
 from ntpath import basename
 from functools import partial
-from lightext import config
 
+from lightext import config
+from lightext.signals import LightextSignals
 
 
 class TabWindow(QWidget):
@@ -57,6 +58,42 @@ class TabWindow(QWidget):
         def scrollTo(self, value):
             self.scroll(0, value)
 
+    class scrollableEditor(QScrollArea):
+        def __init__(self, editor, linebar):
+            super().__init__()
+            self._editor = editor
+            self.linebar = linebar
+
+            hbox = QHBoxLayout(self)
+            hbox.setSizeConstraint(QLayout.SetMinimumSize)
+            hbox.setSpacing(0)
+
+            container = QWidget()
+            container.setLayout(hbox)
+
+            editor.blockListConnect(linebar.renderLines)
+            editor.resizeSignalConnect(linebar.updateHeight)
+            hbox.addWidget(linebar)
+            hbox.addWidget(editor)
+
+            self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+            self.setWidgetResizable(True)
+            self.setWidget(container)
+            self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+
+            self.path = None
+
+        def editor(self):
+            return self._editor
+
+        def open(self, path):
+            self._editor.open(path)
+            self.path = path
+
+        def save(self, path):
+            self._editor.save(path)
+            self.path = path
+
 
 
     def __init__(self):
@@ -69,9 +106,10 @@ class TabWindow(QWidget):
         hbox.addWidget(self.tabs)
         self.setLayout(hbox)
 
+        self.tabs.currentChanged.connect(self.updateWindowTitle)
+
         editor = TextEditor()
         self.new()
-
 
 
     def save(self):
@@ -93,39 +131,27 @@ class TabWindow(QWidget):
             self.tabs.setCurrentWidget(tab)
             tab.open(path)
             self.tabs.setTabText(self.tabs.currentIndex(), basename(path))
+            self.updateWindowTitle()
 
 
     def new(self):
-        scrollArea = QScrollArea()
-        hbox = QHBoxLayout(scrollArea)
-        linebar = self.lineNumberBar()
-        hbox.addWidget(linebar)
-        hbox.setSizeConstraint(QLayout.SetMinimumSize)
-        hbox.setSpacing(0)
-
-        container = QWidget()
-        container.setLayout(hbox)
-
         editor = TextEditor()
-        editor.blockListConnect(linebar.renderLines)
-        editor.resizeSignalConnect(linebar.updateHeight)
-        hbox.addWidget(editor)
-
-        scrollArea.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        scrollArea.setWidgetResizable(True)
-        scrollArea.setWidget(container)
-        scrollArea.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        linebar = self.lineNumberBar()
+        scrollArea = self.scrollableEditor(editor, linebar)
 
         index = self.tabs.addTab(scrollArea, "New file")
         close = self.__closeWidget__()
         close.clicked.connect(partial(self.__closeTab__, index))
         self.tabs.tabBar().setTabButton(index, self.tabs.tabBar().RightSide, close)
+        self.updateWindowTitle()
         return self.tabs.widget(index)
 
     def __closeTab__(self, index, success):
         return self.tabs.removeTab(index)
 
-
+    def updateWindowTitle(self):
+        title = self.tabs.tabText(self.tabs.currentIndex())
+        LightextSignals.changeWindowTitle.emit("Lightext - " + title)
 
 
 class TextEditor(QTextEdit):
@@ -135,7 +161,6 @@ class TextEditor(QTextEdit):
 
     def __init__(self):
         super().__init__()
-        self.path = None
         self.document().blockCountChanged.connect(self.updateBlocks)
         self.newBlockList.connect(self.autoResize)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -144,13 +169,10 @@ class TextEditor(QTextEdit):
         with open(location, "w") as f:
             f.write(self.toPlainText())
 
-        self.path = location
-
     def open(self, location):
         with open(location, "r") as f:
             self.setPlainText(f.read())
 
-        self.path = location
 
     def autoResize(self, blockRects: QRect):
         height = sum([rect.height() for rect in blockRects])
