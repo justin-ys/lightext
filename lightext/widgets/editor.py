@@ -9,7 +9,7 @@ from functools import partial
 from lightext import config
 from lightext.signals import LightextSignals
 
-#git test
+
 class TabWindow(QWidget):
     class __closeWidget__(QPushButton):
         #TODO: Get hovering working in QLabel, or something. QPushButton is ugly
