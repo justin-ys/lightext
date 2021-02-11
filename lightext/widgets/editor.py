@@ -21,58 +21,11 @@ class TabWindow(QWidget):
             self.setIcon(QIcon(img))
             self.setFixedSize(QSize(16,16))
 
-    class lineNumberBar(QWidget):
-        def __init__(self):
-            super().__init__()
-            self.blank = 0
-            self.line = 1
-            self.positions = []
-            self.heights = []
-            self.width_hint = 20
-
-            palette = self.palette()
-            palette.setColor(palette.Background, QColor(233, 237, 245, 200))
-            self.setAutoFillBackground(True)
-            self.setPalette(palette)
-
-        def paintEvent(self, event):
-            painter = QPainter(self)
-            font = painter.font()
-            font.setPointSize(10)
-            painter.setFont(font)
-            number = 1
-            boundingbox = painter.boundingRect(self.contentsRect(), Qt.AlignLeft|Qt.AlignVCenter, str(number))
-            for height in self.heights:
-                boundingbox = painter.boundingRect(self.contentsRect(), Qt.AlignLeft|Qt.AlignVCenter, str(number))
-                # TODO: Find why adding 3 to the height makes it correct, ie find the right way to calculate height
-                # in the first place
-                painter.drawText(0, height+floor((boundingbox.height()/4))+3, str(number))
-                number += 1
-            self.width_hint = boundingbox.width()
-            self.updateGeometry()
-
-        def sizeHint(self):
-            return QSize(self.width_hint, 0)
-
-        def renderLines(self, blocks):
-            heights = []
-            for rect in blocks:
-                heights.append(rect.topLeft().y()+(rect.height()/2))
-            self.heights = heights
-            self.update()
-
-        def updateHeight(self, size: QSize):
-            #Sets height of linebar based on rect given
-            self.resize(self.width(), size.height())
-
-        def scrollTo(self, value):
-            self.scroll(0, value)
 
     class ScrollableEditor(QScrollArea):
-        def __init__(self, editor, linebar):
+        def __init__(self, editor):
             super().__init__()
             self._editor = editor
-            self.linebar = linebar
 
             hbox = QHBoxLayout(self)
             hbox.setSizeConstraint(QLayout.SetMinimumSize)
@@ -81,10 +34,7 @@ class TabWindow(QWidget):
             container = QWidget()
             container.setLayout(hbox)
 
-            editor.blockListConnect(linebar.renderLines)
-            editor.resizeSignalConnect(linebar.updateHeight)
             editor.newBlockList.connect(self.ensure_editior_visible)
-            hbox.addWidget(linebar)
             hbox.addWidget(editor)
 
             self.setWidgetResizable(True)
@@ -149,8 +99,7 @@ class TabWindow(QWidget):
 
     def new(self):
         editor = TextEditor()
-        linebar = self.lineNumberBar()
-        scrollArea = self.ScrollableEditor(editor, linebar)
+        scrollArea = self.ScrollableEditor(editor)
 
         index = self.tabs.addTab(scrollArea, "New file")
         close = self.__closeWidget__()
@@ -178,8 +127,8 @@ class TextEditor(QTextEdit):
         self.newBlockList.connect(self.autoResize)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.cursorPositionChanged.connect(self.update_cursor_blocks)
-        self.document().setDocumentMargin(1)
         self.setStyleSheet("background-color: rgba(123, 111, 145, 60)")
+        self.document().setDocumentMargin(1)
         if isinstance(self.parentWidget(), QScrollArea):
             self.parentWidget().verticalScrollBar().valueChanged.connect(self.update_cursor_blocks)
         self._last_selected_block = None
@@ -202,13 +151,16 @@ class TextEditor(QTextEdit):
     def blockListConnect(self, slot):
         self.newBlockList.connect(slot)
 
-    def updateBlocks(self):
-        # Get bounding rectangle of each QTextBlock in document, put it into a list and emit a signal containing it
+    def getBlockRects(self):
         block = self.document().firstBlock()
         blocks = []
         while block.isValid():
             blocks.append(self.document().documentLayout().blockBoundingRect(block))
             block = block.next()
+        return blocks
+
+    def updateBlocks(self):
+        blocks = self.getBlockRects()
         self.newBlockList.emit(blocks)
 
     def resizeSignalConnect(self, slot):
@@ -228,11 +180,34 @@ class TextEditor(QTextEdit):
             self.viewport().update(region)
         self._last_selected_block = block
 
+    def _paintLineBar(self, painter):
+        font = painter.font()
+        font.setPointSize(10)
+        painter.setFont(font)
+        number = 1
+        boundingbox = painter.boundingRect(self.contentsRect(), Qt.AlignLeft, str(number))
+        heights = [blockRect.topLeft().y() for blockRect in self.getBlockRects()]
+        for height in heights:
+            boundingbox = painter.boundingRect(self.contentsRect(), Qt.AlignLeft, str(number))
+            # Set only left margin
+            frameformat = self.document().rootFrame().frameFormat()
+            frameformat.setLeftMargin(boundingbox.width()+4)
+            self.document().rootFrame().setFrameFormat(frameformat)
+            # TODO: Find why adding 5 to the height makes it correct, ie find the right way to calculate height
+            # in the first place
+            painter.drawText(0, height + floor((boundingbox.height() / 2))+5, str(number))
+            number += 1
+        painter.setCompositionMode(painter.CompositionMode_DestinationAtop)
+        painter.fillRect(QRect(0,0, boundingbox.bottomRight().x()+4, self.contentsRect().bottomRight().y()),
+                         QBrush(QColor(233, 237, 245, 240)))
+
     def paintEvent(self, ev):
         painter = QPainter(self.viewport())
         block = self.textCursor().block()
         rect = self.document().documentLayout().blockBoundingRect(block)
+        rect.setWidth(rect.width())
         painter.fillRect(rect, QBrush(QColor(10, 10, 10,20)))
+        self._paintLineBar(painter)
         super().paintEvent(ev)
 
     def wheelEvent(self, ev):
