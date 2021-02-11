@@ -1,10 +1,11 @@
 from PyQt5.QtWidgets import QTextEdit, QWidget, QTabWidget, QFileDialog, QVBoxLayout, QHBoxLayout, QPushButton, \
     QScrollArea, QLayout, QSizePolicy
-from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt
+from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt, QPoint
 from PyQt5.Qt import QIcon, QSize, QRect
-from PyQt5.QtGui import QPainter, QBrush, QColor
+from PyQt5.QtGui import QPainter, QBrush, QColor, QFont, QRegion
 from ntpath import basename
 from functools import partial
+from math import floor
 
 from lightext import config
 from lightext.signals import LightextSignals
@@ -29,16 +30,25 @@ class TabWindow(QWidget):
             self.heights = []
             self.width_hint = 20
 
+            palette = self.palette()
+            palette.setColor(palette.Background, QColor(233, 237, 245, 200))
+            self.setAutoFillBackground(True)
+            self.setPalette(palette)
+
         def paintEvent(self, event):
             painter = QPainter(self)
-            brush = QBrush(QColor(233, 237, 245, 200))
-            painter.setBrush(brush)
-            painter.fillRect(self.contentsRect(), brush)
+            font = painter.font()
+            font.setPointSize(10)
+            painter.setFont(font)
             number = 1
+            boundingbox = painter.boundingRect(self.contentsRect(), Qt.AlignLeft|Qt.AlignVCenter, str(number))
             for height in self.heights:
-                painter.drawText(0, height, str(number))
+                boundingbox = painter.boundingRect(self.contentsRect(), Qt.AlignLeft|Qt.AlignVCenter, str(number))
+                # TODO: Find why adding 3 to the height makes it correct, ie find the right way to calculate height
+                # in the first place
+                painter.drawText(0, height+floor((boundingbox.height()/4))+3, str(number))
                 number += 1
-            self.width_hint = painter.boundingRect(self.contentsRect(), Qt.AlignLeft, str(number)).width()
+            self.width_hint = boundingbox.width()
             self.updateGeometry()
 
         def sizeHint(self):
@@ -47,7 +57,7 @@ class TabWindow(QWidget):
         def renderLines(self, blocks):
             heights = []
             for rect in blocks:
-                heights.append(rect.topLeft().y()+13)
+                heights.append(rect.topLeft().y()+(rect.height()/2))
             self.heights = heights
             self.update()
 
@@ -58,7 +68,7 @@ class TabWindow(QWidget):
         def scrollTo(self, value):
             self.scroll(0, value)
 
-    class scrollableEditor(QScrollArea):
+    class ScrollableEditor(QScrollArea):
         def __init__(self, editor, linebar):
             super().__init__()
             self._editor = editor
@@ -73,18 +83,25 @@ class TabWindow(QWidget):
 
             editor.blockListConnect(linebar.renderLines)
             editor.resizeSignalConnect(linebar.updateHeight)
+            editor.newBlockList.connect(self.ensure_editior_visible)
             hbox.addWidget(linebar)
             hbox.addWidget(editor)
 
-            self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
             self.setWidgetResizable(True)
             self.setWidget(container)
             self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
 
             self.path = None
 
+        def ensure_editior_visible(self):
+            block = self._editor.textCursor().block()
+            rect = self._editor.document().documentLayout().blockBoundingRect(block)
+            y = rect.bottomRight().y()
+            self.ensureVisible(0, y)
+
         def editor(self):
             return self._editor
+
 
         def open(self, path):
             self._editor.open(path)
@@ -93,8 +110,6 @@ class TabWindow(QWidget):
         def save(self, path):
             self._editor.save(path)
             self.path = path
-
-
 
     def __init__(self):
         super(TabWindow, self).__init__()
@@ -110,7 +125,6 @@ class TabWindow(QWidget):
 
         editor = TextEditor()
         self.new()
-
 
     def save(self):
         tab = self.tabs.currentWidget()
@@ -133,11 +147,10 @@ class TabWindow(QWidget):
             self.tabs.setTabText(self.tabs.currentIndex(), basename(path))
             self.updateWindowTitle()
 
-
     def new(self):
         editor = TextEditor()
         linebar = self.lineNumberBar()
-        scrollArea = self.scrollableEditor(editor, linebar)
+        scrollArea = self.ScrollableEditor(editor, linebar)
 
         index = self.tabs.addTab(scrollArea, "New file")
         close = self.__closeWidget__()
@@ -164,6 +177,12 @@ class TextEditor(QTextEdit):
         self.document().blockCountChanged.connect(self.updateBlocks)
         self.newBlockList.connect(self.autoResize)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.cursorPositionChanged.connect(self.update_cursor_blocks)
+        self.document().setDocumentMargin(1)
+        self.setStyleSheet("background-color: rgba(123, 111, 145, 60)")
+        if isinstance(self.parentWidget(), QScrollArea):
+            self.parentWidget().verticalScrollBar().valueChanged.connect(self.update_cursor_blocks)
+        self._last_selected_block = None
 
     def save(self, location):
         with open(location, "w") as f:
@@ -175,9 +194,10 @@ class TextEditor(QTextEdit):
 
 
     def autoResize(self, blockRects: QRect):
-        height = sum([rect.height() for rect in blockRects])
+        # Strange calculation error seems to get the height wrong by ~2px, which causes yet stranger graphical glitches
+        # if left that way
+        height = sum([rect.height() for rect in blockRects]) + 2
         self.setMinimumHeight(height)
-
 
     def blockListConnect(self, slot):
         self.newBlockList.connect(slot)
@@ -189,7 +209,6 @@ class TextEditor(QTextEdit):
         while block.isValid():
             blocks.append(self.document().documentLayout().blockBoundingRect(block))
             block = block.next()
-
         self.newBlockList.emit(blocks)
 
     def resizeSignalConnect(self, slot):
@@ -198,4 +217,24 @@ class TextEditor(QTextEdit):
     def resizeEvent(self, ev):
         super().resizeEvent(ev)
         self.resizeSignal.emit(self.size())
+        self.update()
 
+    def update_cursor_blocks(self):
+        block = self.textCursor().block()
+        if self._last_selected_block:
+            currentBlockRect = self.document().documentLayout().blockBoundingRect(block).toRect()
+            lastBlockRect = self.document().documentLayout().blockBoundingRect(self._last_selected_block).toRect()
+            region = QRegion(currentBlockRect).united(QRegion(lastBlockRect))
+            self.viewport().update(region)
+        self._last_selected_block = block
+
+    def paintEvent(self, ev):
+        painter = QPainter(self.viewport())
+        block = self.textCursor().block()
+        rect = self.document().documentLayout().blockBoundingRect(block)
+        painter.fillRect(rect, QBrush(QColor(10, 10, 10,20)))
+        super().paintEvent(ev)
+
+    def wheelEvent(self, ev):
+        # Disable scrolling in QTextEdit's AbstractScrollArea, because the parent widget does the scrolling
+        ev.ignore()
