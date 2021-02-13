@@ -31,7 +31,6 @@ class TabWindow(QWidget):
         hbox.addWidget(self.tabs)
         self.setLayout(hbox)
         self.tabs.currentChanged.connect(self.updateWindowTitle)
-        editor = TextEditor()
         self.new()
 
     def save(self):
@@ -85,8 +84,6 @@ class TextEditor(QTextEdit):
         self.cursorPositionChanged.connect(self.update_cursor_blocks)
         self.setStyleSheet("background-color: rgba(123, 111, 145, 60)")
         self.document().setDocumentMargin(1)
-        if isinstance(self.parentWidget(), QScrollArea):
-            self.parentWidget().verticalScrollBar().valueChanged.connect(self.update_cursor_blocks)
         self.path = None
         self._last_selected_block = None
 
@@ -135,7 +132,6 @@ class TextEditor(QTextEdit):
     def resizeEvent(self, ev):
         super().resizeEvent(ev)
         self.resizeSignal.emit(self.size())
-        self.update()
 
     def update_cursor_blocks(self):
         block = self.textCursor().block()
@@ -160,10 +156,12 @@ class TextEditor(QTextEdit):
         heights = [rect.topLeft().y()-topHeight for rect in self.getBlockRects(topBlock, bottomBlock, inclusive=True)]
         for height in heights:
             boundingbox = painter.boundingRect(self.contentsRect(), Qt.AlignLeft, str(number))
+            linebarwidth = boundingbox.width()+4
             # Set only left margin
             frameformat = self.document().rootFrame().frameFormat()
-            frameformat.setLeftMargin(boundingbox.width()+4)
-            self.document().rootFrame().setFrameFormat(frameformat)
+            if frameformat.leftMargin() != linebarwidth:
+                frameformat.setLeftMargin(linebarwidth)
+                self.document().rootFrame().setFrameFormat(frameformat)
             # TODO: Find why adding 5 to the height makes it correct, ie find the right way to calculate height
             # in the first place
             painter.drawText(0, height + floor((boundingbox.height() / 2))+5, str(number))
