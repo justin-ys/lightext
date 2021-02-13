@@ -21,46 +21,6 @@ class TabWindow(QWidget):
             self.setIcon(QIcon(img))
             self.setFixedSize(QSize(16,16))
 
-
-    class ScrollableEditor(QScrollArea):
-        def __init__(self, editor):
-            super().__init__()
-            self._editor = editor
-
-            hbox = QHBoxLayout(self)
-            hbox.setSizeConstraint(QLayout.SetMinimumSize)
-            hbox.setSpacing(0)
-
-            container = QWidget()
-            container.setLayout(hbox)
-
-            editor.newBlockList.connect(self.ensure_editior_visible)
-            hbox.addWidget(editor)
-
-            self.setWidgetResizable(True)
-            self.setWidget(container)
-            self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
-
-            self.path = None
-
-        def ensure_editior_visible(self):
-            block = self._editor.textCursor().block()
-            rect = self._editor.document().documentLayout().blockBoundingRect(block)
-            y = rect.bottomRight().y()
-            self.ensureVisible(0, y)
-
-        def editor(self):
-            return self._editor
-
-
-        def open(self, path):
-            self._editor.open(path)
-            self.path = path
-
-        def save(self, path):
-            self._editor.save(path)
-            self.path = path
-
     def __init__(self):
         super(TabWindow, self).__init__()
 
@@ -70,9 +30,7 @@ class TabWindow(QWidget):
         hbox = QHBoxLayout()
         hbox.addWidget(self.tabs)
         self.setLayout(hbox)
-
         self.tabs.currentChanged.connect(self.updateWindowTitle)
-
         editor = TextEditor()
         self.new()
 
@@ -80,7 +38,9 @@ class TabWindow(QWidget):
         tab = self.tabs.currentWidget()
 
         if tab.path is None:
-            path, _ = QFileDialog.getSaveFileName(self, "Save as...", "", "Plaintext (*.txt)")
+            # See about native dialog in open()
+            path, _ = QFileDialog.getSaveFileName(self, "Save as...", "", "Plaintext (*.txt)",
+                                                  options=QFileDialog.DontUseNativeDialog)
             if path:
                 tab.save(path)
                 self.tabs.setTabText(self.tabs.currentIndex(), basename(path))
@@ -89,7 +49,9 @@ class TabWindow(QWidget):
             tab.save(tab.path)
 
     def open(self):
-        path, _ = QFileDialog.getOpenFileName(self, caption="Open file...")
+        # Native dialog looks better. But today, suddenly, it unexplainably just stopped working. Tragic.
+        # Don't keep for a release version.
+        path, _ = QFileDialog.getOpenFileName(self, caption="Open file...", options=QFileDialog.DontUseNativeDialog)
         if path:
             tab = self.new()
             self.tabs.setCurrentWidget(tab)
@@ -99,9 +61,7 @@ class TabWindow(QWidget):
 
     def new(self):
         editor = TextEditor()
-        scrollArea = self.ScrollableEditor(editor)
-
-        index = self.tabs.addTab(scrollArea, "New file")
+        index = self.tabs.addTab(editor, "New file")
         close = self.__closeWidget__()
         close.clicked.connect(partial(self.__closeTab__, index))
         self.tabs.tabBar().setTabButton(index, self.tabs.tabBar().RightSide, close)
@@ -118,50 +78,56 @@ class TabWindow(QWidget):
 
 class TextEditor(QTextEdit):
 
-    newBlockList = pyqtSignal(list)
     resizeSignal = pyqtSignal(QSize)
 
     def __init__(self):
         super().__init__()
-        self.document().blockCountChanged.connect(self.updateBlocks)
-        self.newBlockList.connect(self.autoResize)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.cursorPositionChanged.connect(self.update_cursor_blocks)
         self.setStyleSheet("background-color: rgba(123, 111, 145, 60)")
         self.document().setDocumentMargin(1)
         if isinstance(self.parentWidget(), QScrollArea):
             self.parentWidget().verticalScrollBar().valueChanged.connect(self.update_cursor_blocks)
+        self.path = None
         self._last_selected_block = None
 
     def save(self, location):
         with open(location, "w") as f:
             f.write(self.toPlainText())
+        self.path = location
 
     def open(self, location):
         with open(location, "r") as f:
             self.setPlainText(f.read())
+        self.path = location
 
+    def getBlockRects(self, initialBlock=None, endBlock = None, inclusive = False):
+        '''
 
-    def autoResize(self, blockRects: QRect):
-        # Strange calculation error seems to get the height wrong by ~2px, which causes yet stranger graphical glitches
-        # if left that way
-        height = sum([rect.height() for rect in blockRects]) + 2
-        self.setMinimumHeight(height)
-
-    def blockListConnect(self, slot):
-        self.newBlockList.connect(slot)
-
-    def getBlockRects(self):
-        block = self.document().firstBlock()
+        :param initialBlock: The block to begin the search at (if not specified, the first block in the editor)
+        :param endBlock: The block to end the search at (if not specified, the last block in the editor)
+        :param inclusive: Whether to include the last block
+        :return: A list of the boundingRects of the editor's QTextBlocks in order, starting from initialBlock
+                 and ending at endBlock
+        '''
+        if not initialBlock:
+            block = self.document().firstBlock()
+        else:
+            block = initialBlock
         blocks = []
+        if endBlock:
+            endBlockRect = self.document().documentLayout().blockBoundingRect(endBlock)
         while block.isValid():
-            blocks.append(self.document().documentLayout().blockBoundingRect(block))
+            rect = self.document().documentLayout().blockBoundingRect(block)
+            if endBlock:
+                # Comparisons of blocks directly do not work, comparisons of their boundingrects do
+                if rect == endBlockRect:
+                    if inclusive:
+                        blocks.append(rect)
+                    break
+            blocks.append(rect)
             block = block.next()
         return blocks
 
-    def updateBlocks(self):
-        blocks = self.getBlockRects()
-        self.newBlockList.emit(blocks)
 
     def resizeSignalConnect(self, slot):
         self.resizeSignal.connect(slot)
@@ -184,9 +150,14 @@ class TextEditor(QTextEdit):
         font = painter.font()
         font.setPointSize(10)
         painter.setFont(font)
-        number = 1
+        #Find top and bottom blocks in viewport. We only need to paint these
+        topBlock = self.document().findBlock(self.cursorForPosition(QPoint(0,0)).position())
+        bottomright = self.viewport().contentsRect().bottomRight()
+        bottomBlock = self.document().findBlock(self.cursorForPosition(bottomright).position())
+        number = len(self.getBlockRects(endBlock=topBlock))+1
         boundingbox = painter.boundingRect(self.contentsRect(), Qt.AlignLeft, str(number))
-        heights = [blockRect.topLeft().y() for blockRect in self.getBlockRects()]
+        topHeight = self.verticalScrollBar().value()
+        heights = [rect.topLeft().y()-topHeight for rect in self.getBlockRects(topBlock, bottomBlock, inclusive=True)]
         for height in heights:
             boundingbox = painter.boundingRect(self.contentsRect(), Qt.AlignLeft, str(number))
             # Set only left margin
@@ -203,13 +174,11 @@ class TextEditor(QTextEdit):
 
     def paintEvent(self, ev):
         painter = QPainter(self.viewport())
+        offset = self.verticalScrollBar().value()
         block = self.textCursor().block()
         rect = self.document().documentLayout().blockBoundingRect(block)
+        rect.moveTop(rect.y()-offset)
         rect.setWidth(rect.width())
         painter.fillRect(rect, QBrush(QColor(10, 10, 10,20)))
         self._paintLineBar(painter)
         super().paintEvent(ev)
-
-    def wheelEvent(self, ev):
-        # Disable scrolling in QTextEdit's AbstractScrollArea, because the parent widget does the scrolling
-        ev.ignore()
