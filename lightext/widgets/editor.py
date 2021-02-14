@@ -138,6 +138,9 @@ class TextEditor(QTextEdit):
         if self._last_selected_block:
             currentBlockRect = self.document().documentLayout().blockBoundingRect(block).toRect()
             lastBlockRect = self.document().documentLayout().blockBoundingRect(self._last_selected_block).toRect()
+            viewportoffset = self.verticalScrollBar().value()
+            currentBlockRect.moveTop(currentBlockRect.y()-viewportoffset)
+            lastBlockRect.moveTop(lastBlockRect.y()-viewportoffset)
             region = QRegion(currentBlockRect).united(QRegion(lastBlockRect))
             self.viewport().update(region)
         self._last_selected_block = block
@@ -152,8 +155,8 @@ class TextEditor(QTextEdit):
         bottomBlock = self.document().findBlock(self.cursorForPosition(bottomright).position())
         number = len(self.getBlockRects(endBlock=topBlock))+1
         boundingbox = painter.boundingRect(self.contentsRect(), Qt.AlignLeft, str(number))
-        topHeight = self.verticalScrollBar().value()
-        heights = [rect.topLeft().y()-topHeight for rect in self.getBlockRects(topBlock, bottomBlock, inclusive=True)]
+        offset = self.verticalScrollBar().value()
+        heights = [rect.topLeft().y()-offset for rect in self.getBlockRects(topBlock, bottomBlock, inclusive=True)]
         for height in heights:
             boundingbox = painter.boundingRect(self.contentsRect(), Qt.AlignLeft, str(number))
             linebarwidth = boundingbox.width()+4
@@ -172,10 +175,10 @@ class TextEditor(QTextEdit):
 
     def paintEvent(self, ev):
         painter = QPainter(self.viewport())
-        offset = self.verticalScrollBar().value()
+        viewportoffset = self.verticalScrollBar().value()
         block = self.textCursor().block()
         rect = self.document().documentLayout().blockBoundingRect(block)
-        rect.moveTop(rect.y()-offset)
+        rect.moveTop(rect.y()-viewportoffset)
         rect.setWidth(rect.width())
         painter.fillRect(rect, QBrush(QColor(10, 10, 10,20)))
         self._paintLineBar(painter)
