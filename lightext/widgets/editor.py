@@ -31,6 +31,11 @@ class TabWindow(QWidget):
         hbox.addWidget(self.tabs)
         self.setLayout(hbox)
         self.tabs.currentChanged.connect(self.updateWindowTitle)
+        LightextSignals.openFile.connect(self.open_file)
+        LightextSignals.openWithDialog.connect(self.open)
+        LightextSignals.saveFile.connect(self.save)
+        LightextSignals.newFile.connect(self.new)
+
         self.new()
 
     def save(self):
@@ -51,6 +56,10 @@ class TabWindow(QWidget):
         # Native dialog looks better. But today, suddenly, it unexplainably just stopped working. Tragic.
         # Don't keep for a release version.
         path, _ = QFileDialog.getOpenFileName(self, caption="Open file...", options=QFileDialog.DontUseNativeDialog)
+        self.open_file(path)
+
+
+    def open_file(self, path):
         if path:
             tab = self.new()
             self.tabs.setCurrentWidget(tab)

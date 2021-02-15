@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (QMainWindow, QAction)
-from lightext.widgets.editor import TabWindow
 
+from lightext.widgets.editor import TabWindow
 from lightext.signals import LightextSignals
 
 class MainWindow(QMainWindow):
@@ -12,23 +12,27 @@ class MainWindow(QMainWindow):
         self.resize(800,600)
         self.setWindowTitle("Lightext")
 
-        editor = TabWindow()
-        self.setCentralWidget(editor)
+        tabbedWindow = TabWindow()
+        self.setCentralWidget(tabbedWindow)
 
         saveAction = QAction("Save", self)
-        saveAction.triggered.connect(editor.save)
+        saveAction.triggered.connect(LightextSignals.saveFile.emit)
 
         openAction = QAction("Open", self)
-        openAction.triggered.connect(editor.open)
+        openAction.triggered.connect(LightextSignals.openWithDialog.emit)
 
         newtabAction  = QAction("New", self)
-        newtabAction.triggered.connect(editor.new)
+        newtabAction.triggered.connect(LightextSignals.newFile.emit)
+
+        exitAction = QAction("Exit", self)
+        exitAction.triggered.connect(LightextSignals.exit.emit)
 
         menubar = self.menuBar()
         fileMenu = menubar.addMenu("File")
         fileMenu.addAction(saveAction)
         fileMenu.addAction(openAction)
         fileMenu.addAction(newtabAction)
+        fileMenu.addAction(exitAction)
 
         LightextSignals.changeWindowTitle.connect(self.setWindowTitle)
 
