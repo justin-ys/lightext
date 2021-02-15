@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (QMainWindow, QAction)
 
-from lightext.widgets.editor import TabWindow
+from lightext.widgets.tabwindow import TabWindow
 from lightext.signals import LightextSignals
 
 class MainWindow(QMainWindow):

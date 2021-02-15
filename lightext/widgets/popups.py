@@ -4,7 +4,6 @@ class Popup(QMessageBox):
     def __init__(self, title, text, type):
         super().__init__()
         '''
-
                 :param title: Title of the popup
                 :param text: Body of the popup
                 :param type: "info", "error" or "critical", used for popup icon
