@@ -2,6 +2,9 @@ import os
 import sys
 from lightext.widgets.popups import Popup
 
+if not os.path.isdir(os.path.expanduser("~") + "/.local/lightext"):
+    os.mkdir(os.path.expanduser("~") + "/.local/lightext")
+
 class ResourceBank():
     def __init__(self):
         with open("resources/current_pack.txt", "r") as f:
@@ -45,3 +48,9 @@ class ResourceBank():
             return location
         else:
             return "resources/error.png"
+
+def get_plugin_folder():
+    path = os.path.expanduser("~") + "/.local/lightext/plugins"
+    if not os.path.isdir(path):
+        os.mkdir(path)
+    return path

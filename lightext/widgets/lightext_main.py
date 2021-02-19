@@ -29,9 +29,9 @@ class MainWindow(QMainWindow):
 
         menubar = self.menuBar()
         fileMenu = menubar.addMenu("File")
-        fileMenu.addAction(saveAction)
-        fileMenu.addAction(openAction)
         fileMenu.addAction(newtabAction)
+        fileMenu.addAction(openAction)
+        fileMenu.addAction(saveAction)
         fileMenu.addAction(exitAction)
 
         LightextSignals.changeWindowTitle.connect(self.setWindowTitle)
